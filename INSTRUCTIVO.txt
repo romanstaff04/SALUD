@@ -4,7 +4,7 @@ Contiene archivos críticos para el funcionamiento del programa.
 
 ✅ Pasos a seguir
 1️ Descargar los archivos desde SAP
-Exportá desde SAP los archivos correspondientes a Equipos y Pendientes.
+Exportá desde SAP los archivos correspondientes
 
 2️ Convertir a Excel
 Abrí los archivos descargados y guardar en formato Excel (.xlsx).
@@ -15,39 +15,5 @@ Mové los archivos convertidos al formato Excel dentro de la carpeta:
 (Esa carpeta es la misma que contiene el ejecutable del programa.)
 
 4️ Ejecutar el programa
-Abrí y ejecutá el archivo llamado:
+Ejecutá el archivo llamado:
 🖥️ Interfaz
-
-El programa se encargará automáticamente de:
-
-1- Combinar todos los datos de los archivos Excel en nuevo archivo Excel 
-2- Muestra una interfaz gráfica donde se puede seleccionar uno o más códigos IATA.
-
-Al procesar:
-    
-    Permite seleccionar uno o varios códigos iatas.
-    
-    Unifica en un nuevo archivo Excel los Export bajados de sap con los datos que el usuario seleccione mediante el código iata
-
-
-    Elimina coordenadas geográficas si no cumplen ciertos criterios de calidad (distinto a rooftop y approximate, las elimina).
-
-    Nombre Solicitante "OCASA DISTRIBUCION POSTAL" borra las coordenadas.
-
-	Nombre Solicitante "LOG IN FARMA", le asigna ruta de accion 503
-
-    Detecta si hay piezas con Motivo Descripción "Entregado" o "Retirado" y los elimina si el usuario lo confirma
-
-    Las piezas con Estados: pendiente de rendición, rendición interna pendiente de despacho, en distribución y finalizada. LAS BORRA
-
-    Corrige direcciones (por ejemplo, convierte “AV” en “Avenida” y asegura que tengan número) en una nueva  columna al final.
-
-    Si hay duplicados en la columna "Y", reemplaza el duplicado por el Equipo.
-
-    Elimina duplicados en columna "Equipo.
-
-    Reemplaza comas por puntos en coordenadas geográficas.
-
-    Asigna las columnas “Distrito Destino” y “Provincia” utilizando un archivo (canalizador o normalizador) de referencia externo.
-
-Guarda los datos procesados en un nuevo archivo Excel, cuyo nombre incluye los códigos IATA seleccionados.

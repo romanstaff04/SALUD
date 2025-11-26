@@ -48,7 +48,6 @@ def canalizadorProvincia(df):
     except Exception:
         return df
 
-
 def borrarMHTML():
     for archivo in glob.glob("*MHTML"):
         os.remove(archivo)
@@ -67,7 +66,6 @@ def cargar_datos():
         return None
     lista = [pd.read_excel(archivo) for archivo in archivos]
     return pd.concat(lista, ignore_index=True)
-
 
 def direccion_necesita_corregir(direccion):
     if pd.isna(direccion):
@@ -129,9 +127,39 @@ def manipularDatos(df):
     df.loc[filtro, "Hora Hasta"] = 1100
 
     #si es org courrier y direccion contiene iriarte o lafayette, se borra esa fila.
-    condicion_iriarte_lafayette = df["Dirección destino"].str.contains(r"iriarte|lafayette", case=False, na=False)
+    """condicion_iriarte_lafayette = df["Dirección destino"].str.contains(r"iriarte|lafayette", case=False, na=False)
     filtro = condicion_iriarte_lafayette & (df["Nombre Solicitante"] == "ORG COURIER ARG")
-    df = df.drop(df[filtro].index)
+    df = df.drop(df[filtro].index)"""
+
+
+
+    df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
+    df.loc[df["Atributo1"] == "Retiro", "Volumen"] = 0.05
+    df.loc[df["Altura"] == 0, "Altura"] = ""
+
+    #clientes que se borran
+    df = df.drop(df[df["Nombre Solicitante"] == "BOSTON SCIENTIFIC ARGENTINA S A"].index)
+    df = df.drop(df[df["Nombre Solicitante"] == "REGISTRO NACIONAL DE LAS PERSONAS"].index)
+    df = df.drop(df[df["Nombre Solicitante"] == "OCASA DISTRIBUCION POSTAL"].index)
+    df = df.drop(df[df["Nombre Solicitante"] == "IBM Argentina S.R.L."].index)
+
+    #que contenga centra y vega, 1 en columna s
+    contengaCentra = df["Destinatario"].str.contains(r"CENTRA|centra|Centra", case=False, na=False)
+    contengaVega = df["Dirección destino"].str.contains(r"vega|VEGA|Vega", case=False, na=False)
+    filtro4 = contengaCentra & contengaVega
+    df.loc[filtro4, "Ruta Virtual"] = 1
+
+    #que contenga centra y vega, 1 en columna s
+    contengaInaer = df["Destinatario"].str.contains(r"INAER|inaer|Inaer|ina|Ina", case=False, na=False)
+    contengaArenales = df["Dirección destino"].str.contains(r"ARENALES|Arenales|arenales|aren|Aren", case=False, na=False)
+    filtro5 = contengaInaer & contengaArenales
+    df.loc[filtro5, "Ruta Virtual"] = 2
+
+    #que contenga MAFFEI y CERVI, 3 en columna s
+    contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI|maffei|Maffei|maffe|Maffe", case=False, na=False)
+    contengaCervi = df["Dirección destino"].str.contains(r"CERVIÑO|cerviño|Cerviño|Cervino|cervino|cervi|CERVI|Cervi", case=False, na=False)
+    filtro6 = contengaMaffei & contengaCervi
+    df.loc[filtro6, "Ruta Virtual"] = 3
 
     return df
 
@@ -157,12 +185,18 @@ def procesar():
         df = canalizadorProvincia(df)
         df["Dirección destino corregida"] = df["Dirección destino"].apply(ordenar_y_corregir_direccion)
 
-        #capital federal y horaDesde mayor o igual a 1400, 502
+        #capital federal y horaDesde >= a 1400, 502
         df["Distrito Destino"] = df["Distrito Destino"].str.strip()
         condicionProvincia = df["Distrito Destino"] == "CAPITAL FEDERAL"
         condicionHora = df["Hora Desde"] >= 1400
         filtro2 = condicionProvincia & condicionHora
         df.loc[filtro2, "Ruta Virtual"] = 502
+
+        #lo que sea retiro en capital federal y cliente gobierno, 600 en ruta de accion
+        condicionProvincia = df["Distrito Destino"] == "CAPITAL FEDERAL"
+        condicionCliente = df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR"
+        filtro3 = condicionProvincia & condicionCliente
+        df.loc[filtro3, "Ruta Virtual"] = 600
 
 
         df_total = pd.concat([df_total, df], ignore_index=True)
