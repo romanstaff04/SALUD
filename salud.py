@@ -95,7 +95,6 @@ def ordenar_y_corregir_direccion(direccion):
         return f"{calle} {altura}"
     return direccion
 
-
 def manipularDatos(df):
     df = df.copy()
 
@@ -131,7 +130,6 @@ def manipularDatos(df):
     filtro = condicion_iriarte_lafayette & (df["Nombre Solicitante"] == "ORG COURIER ARG")
     df = df.drop(df[filtro].index)"""
 
-    # Normalizar dirección
     def normalizar(texto):
         if pd.isna(texto):
             return ""
@@ -139,8 +137,7 @@ def manipularDatos(df):
         texto = texto.replace(",", " ").replace(".", " ")
         texto = " ".join(texto.split())
         return texto
-    
-    df["dir_norm"] = df["Dirección destino"].apply(normalizar)
+
     # Patrones flexibles
     patrones = [
         r"iriarte\s*3070",
@@ -148,9 +145,14 @@ def manipularDatos(df):
         r"iriart.*3070",
     ]
     regex_combinado = "(" + "|".join(patrones) + ")"
-    # Filas a borrar
-    condicion_iriarte = df["dir_norm"].str.contains(regex_combinado, na=False)
-    # Aplicar borrado
+
+    # Crear una serie normalizada SOLO PARA LA CONDICIÓN (no se agrega al dataframe)
+    direcciones_normalizadas = df["Dirección destino"].apply(normalizar)
+
+    # Condición sin añadir columnas
+    condicion_iriarte = direcciones_normalizadas.str.contains(regex_combinado, na=False)
+
+    # Borrar filas
     df = df.drop(df[condicion_iriarte].index)
 
     df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
