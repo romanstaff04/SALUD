@@ -12,6 +12,21 @@ import sys
 CARPETA_CANALIZADOR = "canalizador"
 IATAS_VALIDOS = ["BUE", "IBUE", "GBAS", "GBAO", "GBAN", "LPG"]
 
+def cargar_reglas():
+    try:
+        reglas = pd.read_excel("condicionales.xlsx")
+        reglas["Regla"] = reglas["Regla"].str.strip().str.lower()
+        reglas["Activa"] = reglas["Activa"].str.strip().str.upper()
+        return dict(zip(reglas["Regla"], reglas["Activa"]))
+    except Exception:
+        return {}   # Por defecto, todas activas
+
+REGLAS = cargar_reglas()
+
+def regla_activa(nombre):
+    return REGLAS.get(nombre, "SI") == "SI"   # SI por defecto
+
+
 def obtener_ruta_recurso(nombre_archivo):
     return os.path.abspath(os.path.join(CARPETA_CANALIZADOR, nombre_archivo))
 
@@ -59,7 +74,10 @@ def borrarMHTML():
 
 def borrarXLSX():
     for archivo in glob.glob("*.xlsx"):
-        send2trash(archivo)
+        if archivo == "condicionales.xlsx":
+            continue
+        else:
+            send2trash(archivo)
 
 def obtener_archivos():
     archivo_canalizador = obtener_ruta_recurso("canalizador referencia lucas.xlsx")
@@ -105,6 +123,7 @@ def manipularDatos(df):
 
     df["Equipo"] = df["Equipo"].astype(str).str.strip().str.upper()
     df["Nro. identificación pieza según cliente"] = df["Nro. identificación pieza según cliente"].astype(str).str.strip().str.upper()
+
     duplicados = df.duplicated(subset="Nro. identificación pieza según cliente", keep="first")
     df.loc[duplicados, "Nro. identificación pieza según cliente"] = df.loc[duplicados, "Equipo"]
     df = df.drop_duplicates(subset=["Equipo"], keep="first")
@@ -113,18 +132,20 @@ def manipularDatos(df):
     df["Longitud"] = ""
     df["Distrito Destino"] = ""
     df["Provincia"] = ""
-    df["Atributo1"] = ""
     df["Atributo1"] = df["Tipo"]
 
     df.loc[df["Tipo"] == "Envio", "Tiempo espera"] = 10
 
     df.loc[df["Nombre Solicitante"] == "BIOMERIEUX ARGENTINA S.A.", "Hora Hasta"] = 1300
     df.loc[df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR", "Hora Hasta"] = 1300
-    
-    condicion_oneto = df["Dirección destino"].str.contains(r"onett?o", case=False, na=False)
-    filtro = condicion_oneto & (df["Atributo1"] == "Envio")
-    df.loc[filtro, "Hora Hasta"] = 1100
 
+    # ONETO -- regla
+    if regla_activa("aplicar_oneto_1100"):
+        condicion_oneto = df["Dirección destino"].str.contains(r"onett?o", case=False, na=False)
+        filtro = condicion_oneto & (df["Atributo1"] == "Envio")
+        df.loc[filtro, "Hora Hasta"] = 1100
+
+    # Excluir direcciones Iriarte 3070
     def normalizar(texto):
         if pd.isna(texto):
             return ""
@@ -133,45 +154,48 @@ def manipularDatos(df):
         texto = " ".join(texto.split())
         return texto
 
-    patrones = [
-        r"iriarte\s*3070",
-        r"iriarte.*3070",
-        r"iriart.*3070",
-    ]
-    regex_combinado = "(" + "|".join(patrones) + ")"
-
-    direcciones_normalizadas = df["Dirección destino"].apply(normalizar)
-    condicion_iriarte = direcciones_normalizadas.str.contains(regex_combinado, na=False)
-    df = df.drop(df[condicion_iriarte].index)
+    if regla_activa("limpiar_iriarte_3070"):
+        patrones = [r"iriarte\s*3070", r"iriarte.*3070", r"iriart.*3070"]
+        regex_combinado = "(" + "|".join(patrones) + ")"
+        direcciones_normalizadas = df["Dirección destino"].apply(normalizar)
+        condicion_iriarte = direcciones_normalizadas.str.contains(regex_combinado, na=False)
+        df = df.drop(df[condicion_iriarte].index)
 
     df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
     df.loc[df["Atributo1"] == "Retiro", "Volumen"] = 0.05
     df.loc[df["Altura"] == 0, "Altura"] = ""
 
-    df = df.drop(df[df["Nombre Solicitante"] == "BOSTON SCIENTIFIC ARGENTINA S A"].index)
-    df = df.drop(df[df["Nombre Solicitante"] == "REGISTRO NACIONAL DE LAS PERSONAS"].index)
-    df = df.drop(df[df["Nombre Solicitante"] == "OCASA DISTRIBUCION POSTAL"].index)
-    df = df.drop(df[df["Nombre Solicitante"] == "IBM Argentina S.R.L."].index)
+    # Exclusiones por clientes
+    if regla_activa("excluir_boston"):
+        df = df.drop(df[df["Nombre Solicitante"] == "BOSTON SCIENTIFIC ARGENTINA S A"].index)
+    if regla_activa("excluir_renaper"):
+        df = df.drop(df[df["Nombre Solicitante"] == "REGISTRO NACIONAL DE LAS PERSONAS"].index)
+    if regla_activa("excluir_ocasa"):
+        df = df.drop(df[df["Nombre Solicitante"] == "OCASA DISTRIBUCION POSTAL"].index)
+    if regla_activa("excluir_ibm"):
+        df = df.drop(df[df["Nombre Solicitante"] == "IBM Argentina S.R.L."].index)
 
-    contengaCentra = df["Destinatario"].str.contains(r"CENTRA|centra|Centra", case=False, na=False)
-    contengaVega = df["Dirección destino"].str.contains(r"vega|VEGA|Vega", case=False, na=False)
-    filtro4 = contengaCentra & contengaVega
-    df.loc[filtro4, "Ruta Virtual"] = 1
+    # Rutas virtuales
+    if regla_activa("aplicar_ruta_centra"):
+        contengaCentra = df["Destinatario"].str.contains(r"CENTRA", case=False, na=False)
+        contengaVega = df["Dirección destino"].str.contains(r"vega", case=False, na=False)
+        df.loc[contengaCentra & contengaVega, "Ruta Virtual"] = 1
 
-    contengaInaer = df["Destinatario"].str.contains(r"INAER|inaer|Inaer|ina|Ina", case=False, na=False)
-    contengaArenales = df["Dirección destino"].str.contains(r"ARENALES|Arenales|arenales|aren|Aren", case=False, na=False)
-    filtro5 = contengaInaer & contengaArenales
-    df.loc[filtro5, "Ruta Virtual"] = 2
+    if regla_activa("aplicar_ruta_inaer"):
+        contengaInaer = df["Destinatario"].str.contains(r"INAER|ina", case=False, na=False)
+        contengaArenales = df["Dirección destino"].str.contains(r"aren", case=False, na=False)
+        df.loc[contengaInaer & contengaArenales, "Ruta Virtual"] = 2
 
-    contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI|maffei|Maffei|maffe|Maffe", case=False, na=False)
-    contengaCervi = df["Dirección destino"].str.contains(r"CERVIÑO|cerviño|Cerviño|Cervino|cervino|cervi|CERVI|Cervi", case=False, na=False)
-    filtro6 = contengaMaffei & contengaCervi
-    df.loc[filtro6, "Ruta Virtual"] = 3
+    if regla_activa("aplicar_ruta_maffei"):
+        contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI", case=False, na=False)
+        contengaCervi = df["Dirección destino"].str.contains(r"cervi", case=False, na=False)
+        df.loc[contengaMaffei & contengaCervi, "Ruta Virtual"] = 3
 
+    # Ajustes de altura
     df["Altura"] = df["Altura"].astype(str)
     df.loc[df["Altura"] == "nan", "Altura"] = ""
     df["Altura"] = df["Altura"].str[:-2]
-
+    #concatenar altura con direccion
     df["Dirección destino"] = df["Dirección destino"] + " " + df["Altura"]
 
     return df
@@ -181,11 +205,18 @@ def procesar():
     if df_completo is None:
         messagebox.showwarning("Atención", "No hay archivos para procesar.")
         return
-    
-    #ver si ya existe el archivo antes de procesar uno nuevo
+
+    # Si ya existe archivo previo
     if os.path.exists("subirUnigis-SALUD.xlsx"):
         messagebox.showerror("Error", "Eliminar archivo procesado Anteriormente.")
-        os._exit(0) #mata la ejecucion del programa.
+        os._exit(0)
+
+    # Reglas externas
+    if regla_activa("borrar_mhtml"):
+        borrarMHTML()
+
+    if regla_activa("borrar_xlsx_previos"):
+        borrarXLSX()
 
     df_completo = df_completo[df_completo["Destino"].isin(IATAS_VALIDOS)]
     df_total = pd.DataFrame()
@@ -199,22 +230,24 @@ def procesar():
         df = canalizadorLocalidad(df)
         df = canalizadorProvincia(df)
 
-        condicion_laPlata = df["Distrito Destino"] != "LA PLATA"
-        df.loc[condicion_laPlata, "Dirección destino"] = (
-            df.loc[condicion_laPlata, "Dirección destino"]
-            .apply(ordenar_y_corregir_direccion)
-        )
+        # Corrección de direcciones
+        if regla_activa("corregir_direcciones"):
+            condicion_laPlata = df["Distrito Destino"] != "LA PLATA"
+            df.loc[condicion_laPlata, "Dirección destino"] = (
+                df.loc[condicion_laPlata, "Dirección destino"]
+                .apply(ordenar_y_corregir_direccion)
+            )
 
         df["Distrito Destino"] = df["Distrito Destino"].str.strip()
-        condicionProvincia = df["Distrito Destino"] == "CAPITAL FEDERAL"
-        condicionHora = df["Hora Desde"] >= 1400
-        filtro2 = condicionProvincia & condicionHora
-        df.loc[filtro2, "Ruta Virtual"] = 502
 
-        condicionProvincia = df["Distrito Destino"] == "CAPITAL FEDERAL"
-        condicionCliente = df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR"
-        filtro3 = condicionProvincia & condicionCliente
-        df.loc[filtro3, "Ruta Virtual"] = 600
+        if regla_activa("aplicar_ruta_502"):
+            filtro2 = (df["Distrito Destino"] == "CAPITAL FEDERAL") & (df["Hora Desde"] >= 1400)
+            df.loc[filtro2, "Ruta Virtual"] = 502
+
+        if regla_activa("aplicar_ruta_600"):
+            filtro3 = (df["Distrito Destino"] == "CAPITAL FEDERAL") & \
+                    (df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR")
+            df.loc[filtro3, "Ruta Virtual"] = 600
 
         df_total = pd.concat([df_total, df], ignore_index=True)
 
@@ -222,29 +255,27 @@ def procesar():
         print("No se generaron datos válidos.")
         return
 
-    borrarMHTML()
-    borrarXLSX()
     nombre_salida = "subirUnigis-SALUD.xlsx"
     df_total.to_excel(nombre_salida, index=False)
     os.startfile(nombre_salida)
     print("Proceso finalizado:", nombre_salida)
 
-# ---------------------------
-#   INTERFAZ + SPINNER
-# ---------------------------
 
+
+#   INTERFAZ
 def ejecutar_proceso():
     try:
         procesar()
         ventana.after(0, ventana.destroy)
-    except Exception as e:
-        ventana.after(0, lambda: messagebox.showerror("Error", f"Ocurrió un error:"))
+    except:
+        ventana.after(0, lambda: messagebox.showerror("Error", "Ocurrió un error."))
 
 def ejecutar_en_thread():
-    spinner.start(10)        # ← Inicia el spinner
+    spinner.start(10)
     boton.config(state="disabled")
     hilo = threading.Thread(target=ejecutar_proceso)
     hilo.start()
+
 
 ventana = tk.Tk()
 ventana.title("Procesador de Canalizador")
@@ -264,17 +295,9 @@ boton = tk.Button(
 )
 boton.pack(pady=10)
 
-# --- Spinner gráfico ---
-spinner = ttk.Progressbar(
-    frame,
-    mode="determinate",
-    length=180,
-    
-
-)
+spinner = ttk.Progressbar(frame, mode="determinate", length=180)
 spinner.pack(pady=10)
 
-# --- Footer ---
 footer = tk.Label(
     ventana,
     text="SALUD -- Ruteo Centralizado.",
