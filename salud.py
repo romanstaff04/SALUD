@@ -5,6 +5,7 @@ import re
 from send2trash import send2trash
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 import threading
 import sys
 
@@ -178,8 +179,13 @@ def manipularDatos(df):
 def procesar():
     df_completo = cargar_datos()
     if df_completo is None:
-        print("No hay archivos para procesar.")
+        messagebox.showwarning("Atención", "No hay archivos para procesar.")
         return
+    
+    #ver si ya existe el archivo antes de procesar uno nuevo
+    if os.path.exists("subirUnigis-SALUD.xlsx"):
+        messagebox.showerror("Error", "Eliminar archivo procesado Anteriormente.")
+        os._exit(0) #mata la ejecucion del programa.
 
     df_completo = df_completo[df_completo["Destino"].isin(IATAS_VALIDOS)]
     df_total = pd.DataFrame()
@@ -217,31 +223,32 @@ def procesar():
         return
 
     borrarMHTML()
-    #borrarXLSX()
+    borrarXLSX()
     nombre_salida = "subirUnigis-SALUD.xlsx"
     df_total.to_excel(nombre_salida, index=False)
     os.startfile(nombre_salida)
     print("Proceso finalizado:", nombre_salida)
 
 # ---------------------------
-#   INTERFAZ GRÁFICA
+#   INTERFAZ + SPINNER
 # ---------------------------
 
 def ejecutar_proceso():
     try:
         procesar()
-        ventana.after(0, ventana.destroy)   # Cerrar ventana desde el hilo principal
+        ventana.after(0, ventana.destroy)
     except Exception as e:
-        ventana.after(0, lambda: messagebox.showerror("Error", f"Ocurrió un error:\n{e}"))
+        ventana.after(0, lambda: messagebox.showerror("Error", f"Ocurrió un error:"))
 
 def ejecutar_en_thread():
+    spinner.start(10)        # ← Inicia el spinner
+    boton.config(state="disabled")
     hilo = threading.Thread(target=ejecutar_proceso)
     hilo.start()
-    sys.exit()
 
 ventana = tk.Tk()
 ventana.title("Procesador de Canalizador")
-ventana.geometry("400x200")
+ventana.geometry("400x250")
 ventana.resizable(False, False)
 
 frame = tk.Frame(ventana)
@@ -255,12 +262,25 @@ boton = tk.Button(
     height=1,
     command=ejecutar_en_thread
 )
+boton.pack(pady=10)
+
+# --- Spinner gráfico ---
+spinner = ttk.Progressbar(
+    frame,
+    mode="determinate",
+    length=180,
+    
+
+)
+spinner.pack(pady=10)
 
 # --- Footer ---
-footer = tk.Label(ventana, text="SALUD -- Ruteo Centralizado.", 
-                font=("Arial", 9), fg="gray")
+footer = tk.Label(
+    ventana,
+    text="SALUD -- Ruteo Centralizado.",
+    font=("Arial", 9),
+    fg="gray"
+)
 footer.pack(side="bottom", pady=5)
-
-boton.pack()
 
 ventana.mainloop()
