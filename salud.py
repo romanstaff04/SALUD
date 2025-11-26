@@ -131,7 +131,27 @@ def manipularDatos(df):
     filtro = condicion_iriarte_lafayette & (df["Nombre Solicitante"] == "ORG COURIER ARG")
     df = df.drop(df[filtro].index)"""
 
-
+    # Normalizar dirección
+    def normalizar(texto):
+        if pd.isna(texto):
+            return ""
+        texto = str(texto).lower()
+        texto = texto.replace(",", " ").replace(".", " ")
+        texto = " ".join(texto.split())
+        return texto
+    
+    df["dir_norm"] = df["Dirección destino"].apply(normalizar)
+    # Patrones flexibles
+    patrones = [
+        r"iriarte\s*3070",
+        r"iriarte.*3070",
+        r"iriart.*3070",
+    ]
+    regex_combinado = "(" + "|".join(patrones) + ")"
+    # Filas a borrar
+    condicion_iriarte = df["dir_norm"].str.contains(regex_combinado, na=False)
+    # Aplicar borrado
+    df = df.drop(df[condicion_iriarte].index)
 
     df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
     df.loc[df["Atributo1"] == "Retiro", "Volumen"] = 0.05
