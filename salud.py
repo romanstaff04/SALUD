@@ -183,6 +183,14 @@ def manipularDatos(df):
     filtro6 = contengaMaffei & contengaCervi
     df.loc[filtro6, "Ruta Virtual"] = 3
 
+    df["Altura"] = df["Altura"].astype(str) #lo pasa a text
+    df.loc[df["Altura"] == "nan", "Altura"] = "" #deja la celda vacia cuando tiene nan
+    df["Altura"] = df["Altura"].str[:-2] #borra los ultimos 2 digitos
+
+    #concatenar altura con direccion
+    df["Dirección destino"] = df["Dirección destino"] + " " + df["Altura"]
+
+
     return df
 
 def procesar():
@@ -205,7 +213,13 @@ def procesar():
         df = manipularDatos(df)
         df = canalizadorLocalidad(df)
         df = canalizadorProvincia(df)
-        df["Dirección destino corregida"] = df["Dirección destino"].apply(ordenar_y_corregir_direccion)
+        #el normalizador de direccion funciona en las zonas que NO sean LA PLATA
+        condicion_laPlata = df["Distrito Destino"] != "LA PLATA"
+        df.loc[condicion_laPlata, "Dirección destino"] = (
+        df.loc[condicion_laPlata, "Dirección destino"]
+        .apply(ordenar_y_corregir_direccion)
+)
+        
 
         #capital federal y horaDesde >= a 1400, 502
         df["Distrito Destino"] = df["Distrito Destino"].str.strip()
