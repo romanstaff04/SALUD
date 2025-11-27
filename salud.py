@@ -26,7 +26,6 @@ REGLAS = cargar_reglas()
 def regla_activa(nombre):
     return REGLAS.get(nombre, "SI") == "SI"   # SI por defecto
 
-
 def obtener_ruta_recurso(nombre_archivo):
     return os.path.abspath(os.path.join(CARPETA_CANALIZADOR, nombre_archivo))
 
@@ -133,6 +132,7 @@ def manipularDatos(df):
     df["Distrito Destino"] = ""
     df["Provincia"] = ""
     df["Atributo1"] = df["Tipo"]
+    #df["Dirección destino"] = df["Dirección destino"].str.upper()
 
     df.loc[df["Tipo"] == "Envio", "Tiempo espera"] = 10
 
@@ -155,10 +155,13 @@ def manipularDatos(df):
         return texto
 
     if regla_activa("limpiar_iriarte_3070"):
-        patrones = [r"iriarte\s*3070", r"iriarte.*3070", r"iriart.*3070"]
-        regex_combinado = "(" + "|".join(patrones) + ")"
         direcciones_normalizadas = df["Dirección destino"].apply(normalizar)
-        condicion_iriarte = direcciones_normalizadas.str.contains(regex_combinado, na=False)
+
+        contiene_iriarte = direcciones_normalizadas.str.contains(r"iriart", na=False)
+        contiene_3070 = direcciones_normalizadas.str.contains(r"3070", na=False)
+
+        condicion_iriarte = contiene_iriarte & contiene_3070
+
         df = df.drop(df[condicion_iriarte].index)
 
     df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
@@ -177,22 +180,23 @@ def manipularDatos(df):
 
     # Rutas virtuales
     if regla_activa("aplicar_ruta_centra"):
-        contengaCentra = df["Destinatario"].str.contains(r"CENTRA", case=False, na=False)
-        contengaVega = df["Dirección destino"].str.contains(r"vega", case=False, na=False)
-        df.loc[contengaCentra & contengaVega, "Ruta Virtual"] = 1
+        #contengaCentra = df["Destinatario"].str.contains(r"CENTRA|centra", case=False, na=False)
+        contengaVega = df["Dirección destino"].str.contains(r"tralab|TRALAB", case=False, na=False)
+        df.loc[contengaVega, "Ruta Virtual"] = 1
 
     if regla_activa("aplicar_ruta_inaer"):
-        contengaInaer = df["Destinatario"].str.contains(r"INAER|ina", case=False, na=False)
-        contengaArenales = df["Dirección destino"].str.contains(r"aren", case=False, na=False)
-        df.loc[contengaInaer & contengaArenales, "Ruta Virtual"] = 2
+        contengaArenales = df["Dirección destino"].str.contains(r"3146", case=False, na=False)
+        capitalFederal = df["Distrito Destino"] == "CAPITAL FEDERAL"
+        df.loc[contengaArenales & capitalFederal, "Ruta Virtual"] = 2
 
     if regla_activa("aplicar_ruta_maffei"):
         contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI", case=False, na=False)
-        contengaCervi = df["Dirección destino"].str.contains(r"cervi", case=False, na=False)
-        df.loc[contengaMaffei & contengaCervi, "Ruta Virtual"] = 3
+        contengaCervi = df["Dirección destino"].str.contains(r"3375", case=False, na=False)
+        df.loc[contengaMaffei | contengaCervi, "Ruta Virtual"] = 3
 
     # Ajustes de altura
     df["Altura"] = df["Altura"].astype(str)
+    #df["Volumen"] = df["Volumen"].astype(str)
     df.loc[df["Altura"] == "nan", "Altura"] = ""
     df["Altura"] = df["Altura"].str[:-2]
     #concatenar altura con direccion
@@ -245,8 +249,7 @@ def procesar():
             df.loc[filtro2, "Ruta Virtual"] = 502
 
         if regla_activa("aplicar_ruta_600"):
-            filtro3 = (df["Distrito Destino"] == "CAPITAL FEDERAL") & \
-                    (df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR")
+            filtro3 = (df["Distrito Destino"] == "CAPITAL FEDERAL") & (df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR") & (df["Atributo1"] == "Retiro") 
             df.loc[filtro3, "Ruta Virtual"] = 600
 
         df_total = pd.concat([df_total, df], ignore_index=True)
@@ -259,8 +262,6 @@ def procesar():
     df_total.to_excel(nombre_salida, index=False)
     os.startfile(nombre_salida)
     print("Proceso finalizado:", nombre_salida)
-
-
 
 #   INTERFAZ
 def ejecutar_proceso():
@@ -275,7 +276,6 @@ def ejecutar_en_thread():
     boton.config(state="disabled")
     hilo = threading.Thread(target=ejecutar_proceso)
     hilo.start()
-
 
 ventana = tk.Tk()
 ventana.title("Procesador de Canalizador")
