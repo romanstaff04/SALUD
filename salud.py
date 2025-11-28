@@ -26,7 +26,6 @@ REGLAS = cargar_reglas()
 def regla_activa(nombre):
     return REGLAS.get(nombre, "SI") == "SI"   # SI por defecto
 
-
 def obtener_ruta_recurso(nombre_archivo):
     return os.path.abspath(os.path.join(CARPETA_CANALIZADOR, nombre_archivo))
 
@@ -34,6 +33,7 @@ def canalizadorLocalidad(df):
     ruta = obtener_ruta_recurso("canalizador referencia lucas.xlsx")
     try:
         canalizador = pd.read_excel(ruta)
+        #canalizador["CP Destino"] = canalizador["CP Destino"].astype(str).str[:-2]
         canalizador_reducido = canalizador[["CP Destino", "Distrito Destino"]]
 
         df = df.drop(columns=["Distrito Destino"], errors="ignore")
@@ -53,6 +53,7 @@ def canalizadorProvincia(df):
     ruta = obtener_ruta_recurso("canalizador referencia lucas.xlsx")
     try:
         canalizador = pd.read_excel(ruta)
+        #canalizador["CP Destino"] = canalizador["CP Destino"].astype(str).str[:-2]
         canalizador_reducido = canalizador[["CP Destino", "Provincia", "ZONIFICACION"]]
 
         df = df.drop(columns=["Provincia"], errors="ignore")
@@ -121,8 +122,8 @@ def ordenar_y_corregir_direccion(direccion):
 def manipularDatos(df):
     df = df.copy()
 
-    df["Equipo"] = df["Equipo"].astype(str).str.strip().str.upper()
-    df["Nro. identificación pieza según cliente"] = df["Nro. identificación pieza según cliente"].astype(str).str.strip().str.upper()
+    df["Equipo"] = df["Equipo"].astype(str).str.strip()
+    df["Nro. identificación pieza según cliente"] = df["Nro. identificación pieza según cliente"].astype(str).str.strip()
 
     duplicados = df.duplicated(subset="Nro. identificación pieza según cliente", keep="first")
     df.loc[duplicados, "Nro. identificación pieza según cliente"] = df.loc[duplicados, "Equipo"]
@@ -133,7 +134,7 @@ def manipularDatos(df):
     df["Distrito Destino"] = ""
     df["Provincia"] = ""
     df["Atributo1"] = df["Tipo"]
-
+    #df["CP Destino"] = df["CP Destino"].astype(str)
     df.loc[df["Tipo"] == "Envio", "Tiempo espera"] = 10
 
     df.loc[df["Nombre Solicitante"] == "BIOMERIEUX ARGENTINA S.A.", "Hora Hasta"] = 1300
@@ -155,10 +156,13 @@ def manipularDatos(df):
         return texto
 
     if regla_activa("limpiar_iriarte_3070"):
-        patrones = [r"iriarte\s*3070", r"iriarte.*3070", r"iriart.*3070"]
+        patrones = [r"iriarte\s*3070", r"iriarte.*3070", r"iriart.*3070",r"IRIART.*3070"]
         regex_combinado = "(" + "|".join(patrones) + ")"
         direcciones_normalizadas = df["Dirección destino"].apply(normalizar)
         condicion_iriarte = direcciones_normalizadas.str.contains(regex_combinado, na=False)
+        #si contiene iriarte en la direccion y 3070 en altura, se borra
+        condicion_iriarte2 = df["Dirección destino"].str.contains("iriart", case=False, na=False) & (df["Altura"] == 3070)
+        df = df.drop(df[condicion_iriarte2].index)
         df = df.drop(df[condicion_iriarte].index)
 
     df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
@@ -260,8 +264,6 @@ def procesar():
     os.startfile(nombre_salida)
     print("Proceso finalizado:", nombre_salida)
 
-
-
 #   INTERFAZ
 def ejecutar_proceso():
     try:
@@ -305,5 +307,4 @@ footer = tk.Label(
     fg="gray"
 )
 footer.pack(side="bottom", pady=5)
-
 ventana.mainloop()
