@@ -183,7 +183,11 @@ def manipularDatos(df):
     if regla_activa("aplicar_ruta_centra"):
         contengaCentra = df["Destinatario"].str.contains(r"CENTRA", case=False, na=False)
         contengaVega = df["Dirección destino"].str.contains(r"vega", case=False, na=False)
+        #latitud = "-34.5863142398097"
+        #longitud = "-58.4397811665643"
         df.loc[contengaCentra & contengaVega, "Ruta Virtual"] = 1
+        #df.loc["Latitud"] = latitud
+        #df.loc["Longitud"] = longitud
 
     if regla_activa("aplicar_ruta_inaer"):
         contengaInaer = df["Destinatario"].str.contains(r"INAER|ina", case=False, na=False)
@@ -194,6 +198,7 @@ def manipularDatos(df):
         contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI", case=False, na=False)
         contengaCervi = df["Dirección destino"].str.contains(r"cervi", case=False, na=False)
         df.loc[contengaMaffei & contengaCervi, "Ruta Virtual"] = 3
+        df.loc[contengaMaffei & contengaCervi, "CP Destino"] = 1426
 
     # Ajustes de altura
     df["Altura"] = df["Altura"].astype(str)
@@ -249,8 +254,7 @@ def procesar():
             df.loc[filtro2, "Ruta Virtual"] = 502
 
         if regla_activa("aplicar_ruta_600"):
-            filtro3 = (df["Distrito Destino"] == "CAPITAL FEDERAL") & \
-                    (df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR")
+            filtro3 = (df["Distrito Destino"] == "CAPITAL FEDERAL") & (df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR") & (df["Atributo1"] == "Retiro")
             df.loc[filtro3, "Ruta Virtual"] = 600
 
         df_total = pd.concat([df_total, df], ignore_index=True)
