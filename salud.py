@@ -150,7 +150,7 @@ def manipularDatos(df):
     def normalizar(texto):
         if pd.isna(texto):
             return ""
-        texto = str(texto).lower()
+        texto = str(texto).upper()
         texto = texto.replace(",", " ").replace(".", " ")
         texto = " ".join(texto.split())
         return texto
@@ -183,30 +183,37 @@ def manipularDatos(df):
     if regla_activa("aplicar_ruta_centra"):
         contengaCentra = df["Destinatario"].str.contains(r"CENTRA", case=False, na=False)
         contengaVega = df["Dirección destino"].str.contains(r"vega", case=False, na=False)
-        #latitud = "-34.5863142398097"
-        #longitud = "-58.4397811665643"
+        latitud = "-34.5863142398097"
+        longitud = "-58.4397811665643"
         df.loc[contengaCentra & contengaVega, "Ruta Virtual"] = 1
-        #df.loc["Latitud"] = latitud
-        #df.loc["Longitud"] = longitud
+        df.loc[contengaCentra & contengaVega, "Latitud"] = latitud
+        df.loc[contengaCentra & contengaVega, "Longitud"] = longitud
 
     if regla_activa("aplicar_ruta_inaer"):
         contengaInaer = df["Destinatario"].str.contains(r"INAER|ina", case=False, na=False)
         contengaArenales = df["Dirección destino"].str.contains(r"aren", case=False, na=False)
+        latitud = "-34.5891416690491"
+        longitud = "-58.4084721704397"
         df.loc[contengaInaer & contengaArenales, "Ruta Virtual"] = 2
+        df.loc[contengaInaer & contengaArenales, "Latitud"] = latitud
+        df.loc[contengaInaer & contengaArenales, "Longitud"] = longitud
 
     if regla_activa("aplicar_ruta_maffei"):
         contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI", case=False, na=False)
         contengaCervi = df["Dirección destino"].str.contains(r"cervi", case=False, na=False)
+        latitud = "-34.5808897460626"
+        longitud = "-58.40674341149947"
         df.loc[contengaMaffei & contengaCervi, "Ruta Virtual"] = 3
         df.loc[contengaMaffei & contengaCervi, "CP Destino"] = 1426
-
+        df.loc[contengaMaffei & contengaCervi, "Latitud"] = latitud
+        df.loc[contengaMaffei & contengaCervi, "Longitud"] = longitud
+        
     # Ajustes de altura
     df["Altura"] = df["Altura"].astype(str)
     df.loc[df["Altura"] == "nan", "Altura"] = ""
     df["Altura"] = df["Altura"].str[:-2]
     #concatenar altura con direccion
     df["Dirección destino"] = df["Dirección destino"] + " " + df["Altura"]
-
     return df
 
 def procesar():
@@ -214,7 +221,6 @@ def procesar():
     if df_completo is None:
         messagebox.showwarning("Atención", "No hay archivos para procesar.")
         return
-
     # Si ya existe archivo previo
     if os.path.exists("subirUnigis-SALUD.xlsx"):
         messagebox.showerror("Error", "Eliminar archivo procesado Anteriormente.")
