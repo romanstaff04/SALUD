@@ -207,6 +207,97 @@ def manipularDatos(df):
         df.loc[contengaMaffei & contengaCervi, "CP Destino"] = 1426
         df.loc[contengaMaffei & contengaCervi, "Latitud"] = latitud
         df.loc[contengaMaffei & contengaCervi, "Longitud"] = longitud
+
+    if regla_activa("aplicar_rutas_red_diameld"):
+
+        condicion_nombre_solicitante = df["Nombre Solicitante"] == "RED DIALMED S. A."
+        def ruta_Siete():
+            coordenadas = {
+                1272: ("-34.6339860081878", "-58.3772008827718"), #7
+                1838: ("-34.8065764", "-58.4449117"), #7
+                1846: ("-34.7859874", "-58.3674441"), #7
+                1870: ("-34.6650596716316", "-58.3776176658987"), #7
+            }
+            for cp, (latitud, longitud) in coordenadas.items():
+                condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
+                df.loc[condicion, "Ruta Virtual"] = 7
+                df.loc[condicion, "Latitud"] = latitud
+                df.loc[condicion, "Longitud"] = longitud
+
+        def ruta_cuatro():
+            coordenadas = {
+                1646: ("-34.4446125944445", "-58.555472420816"), #4
+                1648: ("-34.4277128081702", "-58.5742472482455") #4
+            }
+            for cp, (latitud,longitud) in coordenadas.items():
+                condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
+                df.loc[condicion, "Ruta Virtual"] = 4
+                df.loc[condicion, "Latitud"] = latitud
+                df.loc[condicion, "Longitud"] = longitud
+        
+        def ruta_cinco():
+            codigos_postales = [1613, 1663, 1665]
+            for cp in codigos_postales:
+                if cp == 1613:
+                    condicion = condicion_nombre_solicitante & (df["CP Destino"] == 1613)
+                    df.loc[condicion, "Ruta Virtual"] = 5
+                    latitud = "-34.5207027"
+                    longitud = "-58.7157266"
+                    df.loc[condicion, "Latitud"] = latitud
+                    df.loc[condicion, "Longitud"] = longitud
+                if cp == 1663:
+                    direccionDestino = df["Dirección destino"].str.contains("PAUNERO", case=False, na=False)
+                    condicion = condicion_nombre_solicitante & direccionDestino & cp
+                    df.loc[condicion, "Ruta Virtual"] = 5
+                    latitud = "-34.5362947656834"
+                    longitud = "-58.7182742837003"
+                    df.loc[condicion, "Latitud"] = latitud
+                    df.loc[condicion, "Longitud"] = longitud
+                if cp == 1665:
+                    condicion = (
+                        condicion_nombre_solicitante &
+                        df["Dirección destino"].str.contains("GASPAR CAMPOS 6352", case=False, na=False)
+                    )
+                    df.loc[condicion, "Ruta Virtual"] = 5
+                    df.loc[condicion, "Latitud"]  = "-34.5245764749877"
+                    df.loc[condicion, "Longitud"] = "-58.7547179072103"
+
+                    condicion = (
+                        condicion_nombre_solicitante &
+                        df["Dirección destino"].str.contains("René Favaloro 4667", case=False, na=False)
+                    )
+                    df.loc[condicion, "Ruta Virtual"] = 5
+                    df.loc[condicion, "Latitud"]  = "-34.5171957"
+                    df.loc[condicion, "Longitud"] = "-58.7408939"
+        def ruta_seis():
+            coordenadas = {
+                1416: ("-34.6004436122442", "-58.4685479700182"),
+                1716: ("-34.6915596", "-58.6893193")
+            }
+            for cp, (latitud,longitud) in coordenadas.items():
+                condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
+                df.loc[condicion, "Ruta Virtual"] = 6
+                df.loc[condicion, "Latitud"] = latitud
+                df.loc[condicion, "Longitud"] = longitud
+
+
+            direcciones = [
+                (1754, "AV ARTURO ILLIA 2275", "-34.6742324", "-58.5627097"),
+                (1754, "AV JUAN M ROSAS 2557", "-34.6761143413255", "-58.5456141049698")
+            ]
+
+            for cp, direccion, latitud, longitud in direcciones:
+                condicion_cp = df["CP Destino"] == cp
+                condicion_direccion = df["Dirección destino"] == direccion
+                condicion = condicion_nombre_solicitante & condicion_cp & condicion_direccion
+                df.loc[condicion, "Ruta Virtual"] = 6
+                df.loc[condicion, "Latitud"] = latitud
+                df.loc[condicion, "Longitud"] = longitud
+
+        ruta_Siete()
+        ruta_cuatro()
+        ruta_cinco()
+        ruta_seis()
         
     # Ajustes de altura
     df["Altura"] = df["Altura"].astype(str)

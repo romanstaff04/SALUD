@@ -3,17 +3,16 @@ NO mover, modificar ni eliminar la carpeta llamada “canalizador”.
 Contiene archivos críticos para el funcionamiento del programa.
 
 ✅ Pasos a seguir
-1️ Descargar los archivos desde SAP
-Exportá desde SAP los archivos correspondientes
+1️ Descargar los archivos desde SAP o donde sea necesario...
 
 2️ Convertir a Excel
-Abrí los archivos descargados y guardar en formato Excel (.xlsx).
+guardar en formato Excel los archivos (encaso de que no lo esten) - (.xlsx).
 
 3️ Ubicar archivos en la carpeta del programa
-Mové los archivos convertidos al formato Excel dentro de la carpeta:
-📁 unificar-archivos-ocasa1
+Mové los archivos convertidos el formato Excel dentro de la carpeta:
+📁 SALUD
 (Esa carpeta es la misma que contiene el ejecutable del programa.)
 
 4️ Ejecutar el programa
 Ejecutá el archivo llamado:
-🖥️ Interfaz
+🖥️ Salud
