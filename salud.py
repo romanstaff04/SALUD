@@ -8,6 +8,7 @@ from tkinter import messagebox
 from tkinter import ttk
 import threading
 import sys
+import traceback
 
 CARPETA_CANALIZADOR = "canalizador"
 IATAS_VALIDOS = ["BUE", "IBUE", "GBAS", "GBAO", "GBAN", "LPG"]
@@ -33,7 +34,11 @@ def canalizadorLocalidad(df):
     ruta = obtener_ruta_recurso("canalizador referencia lucas.xlsx")
     try:
         canalizador = pd.read_excel(ruta)
-        #canalizador["CP Destino"] = canalizador["CP Destino"].astype(str).str[:-2]
+        # Aseguro que el CP en el canalizador también sea string sin .0
+        canalizador["CP Destino"] = (
+            pd.to_numeric(canalizador["CP Destino"], errors="coerce")
+            .fillna(0).astype(int).astype(str)
+        )
         canalizador_reducido = canalizador[["CP Destino", "Distrito Destino"]]
 
         df = df.drop(columns=["Distrito Destino"], errors="ignore")
@@ -53,7 +58,10 @@ def canalizadorProvincia(df):
     ruta = obtener_ruta_recurso("canalizador referencia lucas.xlsx")
     try:
         canalizador = pd.read_excel(ruta)
-        #canalizador["CP Destino"] = canalizador["CP Destino"].astype(str).str[:-2]
+        canalizador["CP Destino"] = (
+            pd.to_numeric(canalizador["CP Destino"], errors="coerce")
+            .fillna(0).astype(int).astype(str)
+        )
         canalizador_reducido = canalizador[["CP Destino", "Provincia", "ZONIFICACION"]]
 
         df = df.drop(columns=["Provincia"], errors="ignore")
@@ -65,7 +73,6 @@ def canalizadorProvincia(df):
             merge.insert(indice, "Provincia", columna_valores)
 
         return merge
-
     except Exception:
         return df
 
@@ -122,8 +129,8 @@ def ordenar_y_corregir_direccion(direccion):
 def manipularDatos(df):
     df = df.copy()
 
-    df["Equipo"] = df["Equipo"].astype(str).str.strip()
-    df["Nro. identificación pieza según cliente"] = df["Nro. identificación pieza según cliente"].astype(str).str.strip()
+    df["Equipo"] = df.get("Equipo", "").astype(str).str.strip()
+    df["Nro. identificación pieza según cliente"] = df.get("Nro. identificación pieza según cliente", "").astype(str).str.strip()
 
     duplicados = df.duplicated(subset="Nro. identificación pieza según cliente", keep="first")
     df.loc[duplicados, "Nro. identificación pieza según cliente"] = df.loc[duplicados, "Equipo"]
@@ -133,43 +140,61 @@ def manipularDatos(df):
     df["Longitud"] = ""
     df["Distrito Destino"] = ""
     df["Provincia"] = ""
-    df["Atributo1"] = df["Tipo"]
-    #df["CP Destino"] = df["CP Destino"].astype(str)
+    df["Atributo1"] = df.get("Tipo", "")
     df.loc[df["Tipo"] == "Envio", "Tiempo espera"] = 10
 
+    # FORZAR CP Destino como string limpio (sin .0)
+    df["CP Destino"] = (
+        pd.to_numeric(df["CP Destino"], errors="coerce")
+        .fillna(0).astype(int).astype(str)
+    )
+
+    # Normalizo Nombre Solicitante y Dirección destino a strings
+    df["Nombre Solicitante"] = df["Nombre Solicitante"].astype(str).str.strip()
+    df.loc[df["Nombre Solicitante"] == "nan", "Nombre Solicitante"] = ""
+    df["Dirección destino"] = df["Dirección destino"].astype(str).str.strip()
+
+    # Ajustes horarios por cliente
     df.loc[df["Nombre Solicitante"] == "BIOMERIEUX ARGENTINA S.A.", "Hora Hasta"] = 1300
     df.loc[df["Nombre Solicitante"] == "GOBIERNO DE LA CIUDAD DE BUENOS AIR", "Hora Hasta"] = 1300
 
-    # ONETO -- regla
-    if regla_activa("aplicar_oneto_1100"):
-        condicion_oneto = df["Dirección destino"].str.contains(r"onett?o", case=False, na=False)
-        filtro = condicion_oneto & (df["Atributo1"] == "Envio")
-        df.loc[filtro, "Hora Hasta"] = 1100
+    # ---------- Normalizar Altura pero conservar como int para reglas ----------
+    # Convertir altura a numérico entero (NaN -> 0)
+    df["Altura_num"] = pd.to_numeric(df.get("Altura", pd.Series()), errors="coerce").fillna(0).astype(int)
 
-    # Excluir direcciones Iriarte 3070
-    def normalizar(texto):
-        if pd.isna(texto):
-            return ""
-        texto = str(texto).upper()
-        texto = texto.replace(",", " ").replace(".", " ")
-        texto = " ".join(texto.split())
-        return texto
-
+    # ---------- Reglas que usan Altura y Dirección (borrados) ----------
+    # Excluir direcciones Iriarte 3070 (usa Altura_num + dirección normalizada)
     if regla_activa("limpiar_iriarte_3070"):
-        patrones = [r"iriarte\s*3070", r"iriarte.*3070", r"iriart.*3070",r"IRIART.*3070"]
-        regex_combinado = "(" + "|".join(patrones) + ")"
-        direcciones_normalizadas = df["Dirección destino"].apply(normalizar)
-        condicion_iriarte = direcciones_normalizadas.str.contains(regex_combinado, na=False)
-        #si contiene iriarte en la direccion y 3070 en altura, se borra
-        condicion_iriarte2 = df["Dirección destino"].str.contains("iriart", case=False, na=False) & (df["Altura"] == 3070)
-        df = df.drop(df[condicion_iriarte2].index)
-        df = df.drop(df[condicion_iriarte].index)
 
+        def normalizar_dir(texto):
+            if pd.isna(texto):
+                return ""
+            texto = str(texto).upper()
+            texto = texto.replace(",", " ").replace(".", " ")
+            texto = re.sub(r"\s+", " ", texto)
+            return texto.strip()
+        
+        df["Direccion destino sin corregir"] = df["Dirección destino"]
+        #caso 1
+        direccion_norm = df["Dirección destino"].apply(normalizar_dir)
+        caso_separado= (
+            direccion_norm.str.contains(r"\bIRIART", na=False) &
+            (df["Altura_num"] == 3070)
+        )
+        # Caso 2: Dirección ya armada tipo "IRIARTE 3070"
+        caso_completo = direccion_norm.str.contains(r"\bIRIARTE\s*3070\b", na=False)
+
+        # Condición final combinada
+        condicion_iriarte_3070 = caso_separado | caso_completo
+
+        # Drop
+        df = df.drop(df[condicion_iriarte_3070].index)
+
+    # ---------- Otros ajustes simples ----------
     df.loc[df["Atributo1"] == "Retiro", "Tiempo espera"] = 20
     df.loc[df["Atributo1"] == "Retiro", "Volumen"] = 0.05
-    df.loc[df["Altura"] == 0, "Altura"] = ""
 
-    # Exclusiones por clientes
+    # ---------- Exclusiones por clientes ----------
     if regla_activa("excluir_boston"):
         df = df.drop(df[df["Nombre Solicitante"] == "BOSTON SCIENTIFIC ARGENTINA S A"].index)
     if regla_activa("excluir_renaper"):
@@ -179,7 +204,11 @@ def manipularDatos(df):
     if regla_activa("excluir_ibm"):
         df = df.drop(df[df["Nombre Solicitante"] == "IBM Argentina S.R.L."].index)
 
-    # Rutas virtuales
+    # ---------- Rutas virtuales y reglas de ruteo ----------
+    # Guardia: condicion_nombre_solicitante variable que algunas reglas usan
+    condicion_nombre_solicitante = df["Nombre Solicitante"] == "RED DIALMED S. A."
+
+    # Ruta CENTRA
     if regla_activa("aplicar_ruta_centra"):
         contengaCentra = df["Destinatario"].str.contains(r"CENTRA", case=False, na=False)
         contengaVega = df["Dirección destino"].str.contains(r"vega", case=False, na=False)
@@ -189,6 +218,7 @@ def manipularDatos(df):
         df.loc[contengaCentra & contengaVega, "Latitud"] = latitud
         df.loc[contengaCentra & contengaVega, "Longitud"] = longitud
 
+    # Ruta INAER
     if regla_activa("aplicar_ruta_inaer"):
         contengaInaer = df["Destinatario"].str.contains(r"INAER|ina", case=False, na=False)
         contengaArenales = df["Dirección destino"].str.contains(r"aren", case=False, na=False)
@@ -198,124 +228,121 @@ def manipularDatos(df):
         df.loc[contengaInaer & contengaArenales, "Latitud"] = latitud
         df.loc[contengaInaer & contengaArenales, "Longitud"] = longitud
 
+    # Ruta MAFFEI
     if regla_activa("aplicar_ruta_maffei"):
         contengaMaffei = df["Destinatario"].str.contains(r"MAFFEI", case=False, na=False)
         contengaCervi = df["Dirección destino"].str.contains(r"cervi", case=False, na=False)
         latitud = "-34.5808897460626"
         longitud = "-58.40674341149947"
         df.loc[contengaMaffei & contengaCervi, "Ruta Virtual"] = 3
-        df.loc[contengaMaffei & contengaCervi, "CP Destino"] = 1426
+        df.loc[contengaMaffei & contengaCervi, "CP Destino"] = "1426"
         df.loc[contengaMaffei & contengaCervi, "Latitud"] = latitud
         df.loc[contengaMaffei & contengaCervi, "Longitud"] = longitud
 
+    # REGLAS RED DIALMED (agrupadas)
     if regla_activa("aplicar_rutas_red_diameld"):
 
-        condicion_nombre_solicitante = df["Nombre Solicitante"] == "RED DIALMED S. A."
-        def ruta_Siete():
-            coordenadas = {
-                1272: ("-34.6339860081878", "-58.3772008827718"), #7
-                1838: ("-34.8065764", "-58.4449117"), #7
-                1846: ("-34.7859874", "-58.3674441"), #7
-                1870: ("-34.6650596716316", "-58.3776176658987"), #7
-            }
-            for cp, (latitud, longitud) in coordenadas.items():
-                condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
-                df.loc[condicion, "Ruta Virtual"] = 7
-                df.loc[condicion, "Latitud"] = latitud
-                df.loc[condicion, "Longitud"] = longitud
+        # --- Ruta 7 (varios CP) ---
+        coordenadas_ruta_7 = {
+            "1272": ("-34.6339860081878", "-58.3772008827718"),
+            "1838": ("-34.8065764", "-58.4449117"),
+            "1846": ("-34.7859874", "-58.3674441"),
+            "1870": ("-34.6650596716316", "-58.3776176658987"),
+        }
+        for cp, (latitud, longitud) in coordenadas_ruta_7.items():
+            condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
+            df.loc[condicion, "Ruta Virtual"] = 7
+            df.loc[condicion, "Latitud"] = latitud
+            df.loc[condicion, "Longitud"] = longitud
 
-        def ruta_cuatro():
-            coordenadas = {
-                1646: ("-34.4446125944445", "-58.555472420816"), #4
-                1648: ("-34.4277128081702", "-58.5742472482455") #4
-            }
-            for cp, (latitud,longitud) in coordenadas.items():
-                condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
-                df.loc[condicion, "Ruta Virtual"] = 4
-                df.loc[condicion, "Latitud"] = latitud
-                df.loc[condicion, "Longitud"] = longitud
-        
-        def ruta_cinco():
-            codigos_postales = [1613, 1663, 1665]
-            for cp in codigos_postales:
-                if cp == 1613:
-                    condicion = condicion_nombre_solicitante & (df["CP Destino"] == 1613)
-                    df.loc[condicion, "Ruta Virtual"] = 5
-                    latitud = "-34.5207027"
-                    longitud = "-58.7157266"
-                    df.loc[condicion, "Latitud"] = latitud
-                    df.loc[condicion, "Longitud"] = longitud
-                if cp == 1663:
-                    direccionDestino = df["Dirección destino"].str.contains("PAUNERO", case=False, na=False)
-                    condicion = condicion_nombre_solicitante & direccionDestino & cp
-                    df.loc[condicion, "Ruta Virtual"] = 5
-                    latitud = "-34.5362947656834"
-                    longitud = "-58.7182742837003"
-                    df.loc[condicion, "Latitud"] = latitud
-                    df.loc[condicion, "Longitud"] = longitud
-                if cp == 1665:
-                    condicion = (
-                        condicion_nombre_solicitante &
-                        df["Dirección destino"].str.contains("GASPAR CAMPOS 6352", case=False, na=False)
-                    )
-                    df.loc[condicion, "Ruta Virtual"] = 5
-                    df.loc[condicion, "Latitud"]  = "-34.5245764749877"
-                    df.loc[condicion, "Longitud"] = "-58.7547179072103"
+        # --- Ruta 4 (varios CP) ---
+        coordenadas_ruta_4 = {
+            "1646": ("-34.4446125944445", "-58.555472420816"),
+            "1648": ("-34.4277128081702", "-58.5742472482455")
+        }
+        for cp, (latitud, longitud) in coordenadas_ruta_4.items():
+            condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
+            df.loc[condicion, "Ruta Virtual"] = 4
+            df.loc[condicion, "Latitud"] = latitud
+            df.loc[condicion, "Longitud"] = longitud
 
-                    condicion = (
-                        condicion_nombre_solicitante &
-                        df["Dirección destino"].str.contains("René Favaloro 4667", case=False, na=False)
-                    )
-                    df.loc[condicion, "Ruta Virtual"] = 5
-                    df.loc[condicion, "Latitud"]  = "-34.5171957"
-                    df.loc[condicion, "Longitud"] = "-58.7408939"
-        def ruta_seis():
-            coordenadas = {
-                1416: ("-34.6004436122442", "-58.4685479700182"),
-                1716: ("-34.6915596", "-58.6893193")
-            }
-            for cp, (latitud,longitud) in coordenadas.items():
-                condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
-                df.loc[condicion, "Ruta Virtual"] = 6
-                df.loc[condicion, "Latitud"] = latitud
-                df.loc[condicion, "Longitud"] = longitud
+        # --- Ruta 5 (mix de CPs y direcciones) ---
+        # CP 1613 -> toda la CP
+        condicion = condicion_nombre_solicitante & (df["CP Destino"] == "1613")
+        df.loc[condicion, "Ruta Virtual"] = 5
+        df.loc[condicion, "Latitud"] = "-34.5207027"
+        df.loc[condicion, "Longitud"] = "-58.7157266"
 
+        # CP 1663 -> filtrar por palabra PAUNERO dentro de Dirección destino
+        condicion = condicion_nombre_solicitante & (df["CP Destino"] == "1663") & df["Dirección destino"].str.contains("PAUNERO", case=False, na=False)
+        df.loc[condicion, "Ruta Virtual"] = 5
+        df.loc[condicion, "Latitud"] = "-34.5362947656834"
+        df.loc[condicion, "Longitud"] = "-58.7182742837003"
 
-            direcciones = [
-                (1754, "AV ARTURO ILLIA 2275", "-34.6742324", "-58.5627097"),
-                (1754, "AV JUAN M ROSAS 2557", "-34.6761143413255", "-58.5456141049698")
-            ]
+        # CP 1665 -> casos por direcciones específicas
+        reglas_1665 = {
+            "GASPAR CAMPOS 6352": ("-34.5245764749877", "-58.7547179072103"),
+            "RENE FAVALORO 4667": ("-34.5171957", "-58.7408939")
+        }
+        for direccion, (latitud, longitud) in reglas_1665.items():
+            # uso re.escape para que cualquier caracter especial no rompa el regex
+            condicion = (
+                condicion_nombre_solicitante &
+                (df["CP Destino"] == "1665") &
+                df["Dirección destino"].str.contains(re.escape(direccion), case=False, na=False)
+            )
+            df.loc[condicion, "Ruta Virtual"] = 5
+            df.loc[condicion, "Latitud"] = latitud
+            df.loc[condicion, "Longitud"] = longitud
 
-            for cp, direccion, latitud, longitud in direcciones:
-                condicion_cp = df["CP Destino"] == cp
-                condicion_direccion = df["Dirección destino"] == direccion
-                condicion = condicion_nombre_solicitante & condicion_cp & condicion_direccion
-                df.loc[condicion, "Ruta Virtual"] = 6
-                df.loc[condicion, "Latitud"] = latitud
-                df.loc[condicion, "Longitud"] = longitud
+        # --- Ruta 6: CP fijos y direcciones puntuales ---
+        coordenadas_ruta_6 = {
+            "1416": ("-34.6004436122442", "-58.4685479700182"),
+            "1716": ("-34.6915596", "-58.6893193")
+        }
+        for cp, (latitud, longitud) in coordenadas_ruta_6.items():
+            condicion = condicion_nombre_solicitante & (df["CP Destino"] == cp)
+            df.loc[condicion, "Ruta Virtual"] = 6
+            df.loc[condicion, "Latitud"] = latitud
+            df.loc[condicion, "Longitud"] = longitud
 
-        ruta_Siete()
-        ruta_cuatro()
-        ruta_cinco()
-        ruta_seis()
-        
-    # Ajustes de altura
-    df["Altura"] = df["Altura"].astype(str)
-    df.loc[df["Altura"] == "nan", "Altura"] = ""
-    df["Altura"] = df["Altura"].str[:-2]
-    #concatenar altura con direccion
-    df["Dirección destino"] = df["Dirección destino"] + " " + df["Altura"]
+        # direcciones puntuales (varias filas con mismo CP)
+        direcciones = [
+            ("1754", "AV ARTURO ILLIA 2275", "-34.6742324", "-58.5627097"),
+            ("1754", "AV JUAN M ROSAS 2557", "-34.6761143413255", "-58.5456141049698")
+        ]
+        for cp, direccion, latitud, longitud in direcciones:
+            condicion = (
+                condicion_nombre_solicitante &
+                (df["CP Destino"] == cp) &
+                df["Dirección destino"].str.contains(re.escape(direccion), case=False, na=False)
+            )
+            df.loc[condicion, "Ruta Virtual"] = 6
+            df.loc[condicion, "Latitud"] = latitud
+            df.loc[condicion, "Longitud"] = longitud
+
+    # ---------- Después de aplicar reglas: convertir Altura a texto y concatenar ----------
+    # Altura como texto sin 0 ni .0
+    df["Altura"] = df["Altura_num"].replace(0, "").astype(str)
+    # Concatenar (si Dirección destino ya tiene contenido)
+    df["Dirección destino"] = df["Dirección destino"].str.strip()
+    df["Dirección destino"] = df["Dirección destino"] + df["Altura"].apply(lambda x: (" " + x) if x else "")
+
+    # Limpio columna intermedia
+    df = df.drop(columns=["Altura_num"], errors="ignore")
+
     return df
 
 def procesar():
-    df_completo = cargar_datos()
-    if df_completo is None:
+    archivos = obtener_archivos()
+    if not archivos:
         messagebox.showwarning("Atención", "No hay archivos para procesar.")
         return
+
     # Si ya existe archivo previo
     if os.path.exists("subirUnigis-SALUD.xlsx"):
         messagebox.showerror("Error", "Eliminar archivo procesado Anteriormente.")
-        os._exit(0)
+        return
 
     # Reglas externas
     if regla_activa("borrar_mhtml"):
@@ -323,6 +350,11 @@ def procesar():
 
     if regla_activa("borrar_xlsx_previos"):
         borrarXLSX()
+
+    df_completo = cargar_datos()
+    if df_completo is None:
+        messagebox.showwarning("Atención", "No hay archivos para procesar.")
+        return
 
     df_completo = df_completo[df_completo["Destino"].isin(IATAS_VALIDOS)]
     df_total = pd.DataFrame()
@@ -336,7 +368,7 @@ def procesar():
         df = canalizadorLocalidad(df)
         df = canalizadorProvincia(df)
 
-        # Corrección de direcciones
+        # Corrección de direcciones (solo si corresponde)
         if regla_activa("corregir_direcciones"):
             condicion_laPlata = df["Distrito Destino"] != "LA PLATA"
             df.loc[condicion_laPlata, "Dirección destino"] = (
@@ -362,7 +394,11 @@ def procesar():
 
     nombre_salida = "subirUnigis-SALUD.xlsx"
     df_total.to_excel(nombre_salida, index=False)
-    os.startfile(nombre_salida)
+    try:
+        os.startfile(nombre_salida)
+    except Exception:
+        # En sistemas donde os.startfile no exista simplemente lo ignoramos
+        pass
     print("Proceso finalizado:", nombre_salida)
 
 #   INTERFAZ
@@ -370,15 +406,16 @@ def ejecutar_proceso():
     try:
         procesar()
         ventana.after(0, ventana.destroy)
-    except:
-        ventana.after(0, lambda: messagebox.showerror("Error", "Ocurrió un error."))
+    except Exception as e:
+        # Muestro el error real para que puedas debuguear
+        tb = traceback.format_exc()
+        ventana.after(0, lambda: messagebox.showerror("Error", f"Ocurrió un error:\n{e}\n\n{tb}"))
 
 def ejecutar_en_thread():
     spinner.start(10)
     boton.config(state="disabled")
     hilo = threading.Thread(target=ejecutar_proceso)
     hilo.start()
-
 
 ventana = tk.Tk()
 ventana.title("Procesador de Canalizador")
