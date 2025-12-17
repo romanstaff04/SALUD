@@ -241,7 +241,6 @@ def manipularDatos(df):
 
     # REGLAS RED DIALMED (agrupadas)
     if regla_activa("aplicar_rutas_red_diameld"):
-
         # --- Ruta 7 (varios CP) ---
         coordenadas_ruta_7 = {
             "1272": ("-34.6339860081878", "-58.3772008827718"),
@@ -321,6 +320,52 @@ def manipularDatos(df):
             df.loc[condicion, "Latitud"] = latitud
             df.loc[condicion, "Longitud"] = longitud
 
+    if regla_activa("aplicar_geo_direcciones_puntuales"):
+        #ARGERICH
+        destinatarioArgerich = df["Destinatario"].str.contains("argerich", case=False, na=False)
+        latitud = "-34.62781038793198"
+        longitud = "-58.36602567536391"
+        df.loc[destinatarioArgerich, "Latitud"] = latitud
+        df.loc[destinatarioArgerich, "Longitud"] = longitud
+
+        #AUSTRAL 1500
+        filtro = (df["Destinatario"].str.contains("AUSTRAL", case=False, na=False)) & (df["Dirección destino"]).str.contains("1500")
+        latitud = "-34.45716450254549"
+        longitud = "-58.86542001645667"
+        df.loc[filtro, "Latitud"] = latitud
+        df.loc[filtro, "Longitud"] = longitud
+
+        #GARRAHAN
+        filtro = df["Destinatario"].str.contains("GARRAHAN", case=False, na=False)
+        latitud = "-34.63061257816345"
+        longitud = "-58.39224010230858"
+        df.loc[filtro, "Latitud"] = latitud
+        df.loc[filtro, "Longitud"] = longitud
+
+        #MARCOS SASTRE
+        direcciones = {
+            "MARCOS SASTRE 01088": ("-34.47823631330188", "-58.663775096023606"),
+            "MARCOS SASTRE 1088": ("-34.47823631330188", "-58.663775096023606"),
+            "M SASTRE 1088": ("-34.47823631330188", "-58.663775096023606")
+        }
+        for direccion, (lat, lon) in direcciones.items():
+            df.loc[df["Dirección destino"] == direccion, "Latitud"] = lat
+            df.loc[df["Dirección destino"] == direccion, "Longitud"] = lon
+
+        #ALEMAN
+        condicion = df["Destinatario"].str.contains("ALEMAN", case=False, na=False)
+        latitud = "-34.59176481183434"
+        longitud = "-58.40202863251973"
+        df.loc[condicion, "Latitud"] = latitud
+        df.loc[condicion, "Longitud"] = longitud
+        
+        #URQUIZA
+        condicion = (df["Destinatario"].str.contains(r"RAMOS|AGUDOS",case=False, na=False)) & (df["Dirección destino"].str.contains("URQUIZA", case=False, na=False))
+        latitud = "-34.61764691461015"
+        longitud = "-58.409846348298025"
+        df.loc[condicion, "Latitud"] = latitud
+        df.loc[condicion, "Longitud"] = longitud
+
     # ---------- Después de aplicar reglas: convertir Altura a texto y concatenar ----------
     # Altura como texto sin 0 ni .0
     df["Altura"] = df["Altura_num"].replace(0, "").astype(str)
@@ -345,11 +390,11 @@ def procesar():
         return
 
     # Reglas externas
-    if regla_activa("borrar_mhtml"):
+    """if regla_activa("borrar_mhtml"):
         borrarMHTML()
 
     if regla_activa("borrar_xlsx_previos"):
-        borrarXLSX()
+        borrarXLSX()"""
 
     df_completo = cargar_datos()
     if df_completo is None:
@@ -391,6 +436,12 @@ def procesar():
     if df_total.empty:
         print("No se generaron datos válidos.")
         return
+
+    if regla_activa("borrar_mhtml"):
+        borrarMHTML()
+
+    if regla_activa("borrar_xlsx_previos"):
+        borrarXLSX()
 
     nombre_salida = "subirUnigis-SALUD.xlsx"
     df_total.to_excel(nombre_salida, index=False)
