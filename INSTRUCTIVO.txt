@@ -1,0 +1,20 @@
+⚠️ IMPORTANTE:
+NO mover, modificar ni eliminar la carpeta llamada “canalizador”.
+Contiene archivos críticos para el funcionamiento del programa.
+
+✅ Pasos a seguir
+1️ Descargar los archivos desde SAP o donde sea necesario...
+
+2️ Convertir a Excel
+guardar en formato Excel los archivos - (.xlsx).
+
+3️ Ubicar archivos en la carpeta del programa
+Mové los archivos convertidos el formato Excel dentro de la carpeta (IMPORTANTE):
+📁 SALUD
+(Esa carpeta es la misma que contiene el ejecutable del programa.)
+
+(EL EJECUTABLE SIEMPRE DEBE ESTAR DENTRO DE LA CARPETA JUNTO CON LOS ARCHIVOS EXCEL A PROCESAR)
+
+4️ Ejecutar el programa
+Ejecutá el archivo llamado:
+🖥️ Salud
